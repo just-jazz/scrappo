@@ -8,8 +8,8 @@ Created on Fri Jul 19 10:04:14 2019
 
 import pandas
 from selenium import webdriver
-from selenium.webdriver.common.keys import Keys
 import time
+from datetime import datetime
 
 def main():
     
@@ -42,6 +42,7 @@ class Scrappo:
      
     def scrape(self, userInput):
         Scrape = Scrappo()
+        now = datetime.now()
         
         linktooverview = userInput[0]
         noOfMatches = int(userInput[1])
@@ -51,7 +52,7 @@ class Scrappo:
         driver.maximize_window()
         driver.get(linktooverview) #öffnet overview aller matches
         time.sleep(0.5)
-        
+             
         if Scrape.checkGUI(driver):
             driver.quit()
             return()
@@ -60,15 +61,18 @@ class Scrappo:
         
         dfMatchData = Scrape.createDF()
         scrapedMatches = 0
-        noOfMatchesFound = 0
-#        line = 0
-#        day = 1
+        
+        line = 0
+        day = 1
         while scrapedMatches < noOfMatches:
-            #temp = Scrape.selectNextFSMatch(driver, userName, noOfMatchesFound, linktooverview, line, day)
-            #print(temp)
-            noOfMatchesFound = noOfMatchesFound + Scrape.selectNextFSMatch(driver, userName, noOfMatchesFound, linktooverview)      #, line, day
-#            line = temp[1]
-#            day = temp[2]
+            print("line vor Aufruf: " + str(line))
+            print("day vor Aufruf: " + str(day))
+            
+            temp = Scrape.selectNextFSMatch(driver, linktooverview, line, day)
+            line = temp[0]
+            day = temp[1]
+            
+            #Scrape.scrolldown(driver, scrapedMatches)
             if Scrape.matchValidation(driver):
                 tempList = Scrape.createTempList()
                 tempList = Scrape.getGeneralData(driver, tempList)
@@ -80,11 +84,14 @@ class Scrappo:
                 dfMatchData = Scrape.list2df(tempList, dfMatchData)
                 
                 scrapedMatches = scrapedMatches + 1
+                Scrape.excelWriter(dfMatchData, userName, now)
   
             driver.get(linktooverview)
+            driver.execute_script("window.scrollTo(0, "+str(150*scrapedMatches)+")") 
+            time.sleep(0.5)
             
         driver.quit()
-        Scrape.excelWriter(dfMatchData)
+        
         
     def createDF(self):
         dfMatchData = pandas.DataFrame(columns = ['date', 'time', 'win', 'durationTotal',
@@ -104,11 +111,14 @@ class Scrappo:
                                              'Number of Players' : tempList[64]}, ignore_index = True)    
         return finalMatchData
     
-    def excelWriter(self, df):
+    def excelWriter(self, df, username, now):
         # Create a Pandas Excel writer 
         # object using XlsxWriter as the engine. 
-        writer = pandas.ExcelWriter('results.xlsx', engine = 'xlsxwriter')
-        
+        #now = datetime.now()
+        dt_string = now.strftime("%d/%m/%Y %H:%M:%S")
+        dt_string = dt_string.replace('/', '').replace(':', '').replace(' ', '_')
+        writer = pandas.ExcelWriter(username + '_' + dt_string + '_v1.xlsx', engine = 'xlsxwriter')
+
         # Write a dataframe to the worksheet. 
         df.to_excel(writer, sheet_name ='FinalMatchData') 
           
@@ -116,13 +126,10 @@ class Scrappo:
         # object and output the Excel file. 
         writer.save() 
         
-    def selectNextFSMatch(self, driver, userName, noOfMatchesFound, linktooverview): #r, q
-        
-        r = 1
-        q = 1
-        #r = r+1
+    def selectNextFSMatch(self, driver, linktooverview, r, q): 
+        r = r+1
         suchRadius = 100
-        matchNo = 0
+        #matchNo = 0
         
         while r<= suchRadius:
             try:
@@ -130,27 +137,30 @@ class Scrappo:
                 matchtype = driver.find_element_by_xpath("//*[@id='app']/div[3]/div[1]/div/main/div[2]/div/div[2]/div[2]/div[2]/div[" + str(q) + "]/div/div[" + str(r) + "]/div/div[1]/span[1]").text
                                                           
                 if matchtype.startswith("Firestorm Squads"):
-                    matchNo= matchNo+1
-                    if matchNo > noOfMatchesFound:
-                        current_url = driver.find_element_by_xpath(matchPath).click() #click on report
-                        time.sleep(0.5)
-                        driver.get(driver.current_url) #refresh page
-                        time.sleep(0.2)
-                        return 1     #[1, r, q]
-                    else: 
-                        r = r+1
+                    #matchNo= matchNo+1
+                    
+                    current_url = driver.find_element_by_xpath(matchPath).click() #click on report
+                    time.sleep(0.5)
+                    driver.get(driver.current_url)
+                    time.sleep(1)
+                    return [r, q]
+                    
                 else:
                     print("kein FSmatch an Stelle " + str(r) )
                     r = r+1
                     
             except Exception:
                 q = q+1 
-                #r = 1
+                r = 1
                 
-          
+    def scrolldown(self, driver, scrapedMatches):
+        if scrapedMatches > 5:
+            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            time.sleep(1)
+        return
     
     def matchValidation(self, driver):
-        
+        time.sleep(0.5)
         duration = driver.find_element_by_xpath("//*[@id='app']/div[3]/div[1]/div/main/div[2]/div/aside/header/div/div/div/div[1]/div[2]").text
         duration = duration.split('m')
         if int(duration[0]) > 5:
@@ -208,7 +218,7 @@ class Scrappo:
                     return position               
                 else:
                     r = r+1 #nächster Spieler im Team für input namen vergleichen
-            except Exception as e: #nächstes Team für input namen vergleichen
+            except Exception: #nächstes Team für input namen vergleichen
                 q = q+1
                 r = 1
         print("No Player found in match")
@@ -228,7 +238,7 @@ class Scrappo:
                 tempr = r+offset
                 matchData = Scrape.readUserData(driver, [q,tempr], PlayerNumber, matchData)
                 offset = offset + 1
-            except Exception as e:
+            except Exception:
                 offset = -1
                 while offset >= -4:
                     try:
@@ -238,7 +248,7 @@ class Scrappo:
                         tempr = r+offset
                         matchData = Scrape.readUserData(driver, [q,tempr], PlayerNumber, matchData)
                         offset = offset - 1
-                    except Exception as e:
+                    except Exception:
                         matchData[64] = PlayerNumber
                         return(matchData)
         matchData[64] = PlayerNumber               
@@ -252,36 +262,36 @@ class Scrappo:
         #time played:
         matchData[5 + (playerNo-1)*15]  = driver.find_element_by_xpath("//*[@id='app']/div[3]/div[1]/div/main/div[2]/div/div[2]/div[" + str(q) + "]/div[3]/div[" + str(r) + "]/div[1]/div[1]/span").text
         #score:
-        matchData[6 + (playerNo-1)*15] = driver.find_element_by_xpath("//*[@id='app']/div[3]/div[1]/div/main/div[2]/div/div[2]/div[" + str(q) + "]/div[3]/div[" + str(r) + "]/div[1]/div[2]/div").text
+        matchData[6 + (playerNo-1)*15] = int(driver.find_element_by_xpath("//*[@id='app']/div[3]/div[1]/div/main/div[2]/div/div[2]/div[" + str(q) + "]/div[3]/div[" + str(r) + "]/div[1]/div[2]/div").text.replace(',', ''))
         #score per min:
-        matchData[7 + (playerNo-1)*15] = driver.find_element_by_xpath("//*[@id='app']/div[3]/div[1]/div/main/div[2]/div/div[2]/div[" + str(q) + "]/div[3]/div[" + str(r) + "]/div[1]/div[3]/div").text
+        matchData[7 + (playerNo-1)*15] = float(driver.find_element_by_xpath("//*[@id='app']/div[3]/div[1]/div/main/div[2]/div/div[2]/div[" + str(q) + "]/div[3]/div[" + str(r) + "]/div[1]/div[3]/div").text.replace(',', ''))
         #kd:
-        matchData[8 + (playerNo-1)*15] = driver.find_element_by_xpath("//*[@id='app']/div[3]/div[1]/div/main/div[2]/div/div[2]/div[" + str(q) + "]/div[3]/div[" + str(r) + "]/div[1]/div[4]/div").text
+        matchData[8 + (playerNo-1)*15] = float(driver.find_element_by_xpath("//*[@id='app']/div[3]/div[1]/div/main/div[2]/div/div[2]/div[" + str(q) + "]/div[3]/div[" + str(r) + "]/div[1]/div[4]/div").text)
         #kills:
-        matchData[9 + (playerNo-1)*15] = driver.find_element_by_xpath("//*[@id='app']/div[3]/div[1]/div/main/div[2]/div/div[2]/div[" + str(q) + "]/div[3]/div[" + str(r) + "]/div[1]/div[5]/div").text
+        matchData[9 + (playerNo-1)*15] = int(driver.find_element_by_xpath("//*[@id='app']/div[3]/div[1]/div/main/div[2]/div/div[2]/div[" + str(q) + "]/div[3]/div[" + str(r) + "]/div[1]/div[5]/div").text)
         #death:
-        matchData[10 + (playerNo-1)*15] = driver.find_element_by_xpath("//*[@id='app']/div[3]/div[1]/div/main/div[2]/div/div[2]/div[" + str(q) + "]/div[3]/div[" + str(r) + "]/div[1]/div[6]/div").text
+        matchData[10 + (playerNo-1)*15] = int(driver.find_element_by_xpath("//*[@id='app']/div[3]/div[1]/div/main/div[2]/div/div[2]/div[" + str(q) + "]/div[3]/div[" + str(r) + "]/div[1]/div[6]/div").text)
         
         #open drop down menu
         driver.find_element_by_xpath("//*[@id='app']/div[3]/div[1]/div/main/div[2]/div/div[2]/div[" + str(q) + "]/div[3]/div[" + str(r) + "]/div[1]/div[7]/span").click()
         time.sleep(0.2)
         
         #killspermin
-        matchData[11 + (playerNo-1)*15] = driver.find_element_by_xpath("//*[@id='app']/div[3]/div[1]/div/main/div[2]/div/div[2]/div[" + str(q) + "]/div[3]/div[" + str(r) + "]/div[2]/div[1]/div[2]/div[4]/span[2]").text
+        matchData[11 + (playerNo-1)*15] = float(driver.find_element_by_xpath("//*[@id='app']/div[3]/div[1]/div/main/div[2]/div/div[2]/div[" + str(q) + "]/div[3]/div[" + str(r) + "]/div[2]/div[1]/div[2]/div[4]/span[2]").text)
         #damage
-        matchData[12 + (playerNo-1)*15] = driver.find_element_by_xpath("//*[@id='app']/div[3]/div[1]/div/main/div[2]/div/div[2]/div[" + str(q) + "]/div[3]/div[" + str(r) + "]/div[2]/div[1]/div[2]/div[5]/span[2]").text
+        matchData[12 + (playerNo-1)*15] = int(driver.find_element_by_xpath("//*[@id='app']/div[3]/div[1]/div/main/div[2]/div/div[2]/div[" + str(q) + "]/div[3]/div[" + str(r) + "]/div[2]/div[1]/div[2]/div[5]/span[2]").text.replace(',', ''))
         #headshots
-        matchData[13 + (playerNo-1)*15] = driver.find_element_by_xpath("//*[@id='app']/div[3]/div[1]/div/main/div[2]/div/div[2]/div[" + str(q) + "]/div[3]/div[" + str(r) + "]/div[2]/div[1]/div[2]/div[6]/span[2]").text
+        matchData[13 + (playerNo-1)*15] = int(driver.find_element_by_xpath("//*[@id='app']/div[3]/div[1]/div/main/div[2]/div/div[2]/div[" + str(q) + "]/div[3]/div[" + str(r) + "]/div[2]/div[1]/div[2]/div[6]/span[2]").text)
         #schots taken
-        matchData[14 + (playerNo-1)*15] = driver.find_element_by_xpath("//*[@id='app']/div[3]/div[1]/div/main/div[2]/div/div[2]/div[" + str(q) + "]/div[3]/div[" + str(r) + "]/div[2]/div[1]/div[2]/div[10]/span[2]").text
+        matchData[14 + (playerNo-1)*15] = int(driver.find_element_by_xpath("//*[@id='app']/div[3]/div[1]/div/main/div[2]/div/div[2]/div[" + str(q) + "]/div[3]/div[" + str(r) + "]/div[2]/div[1]/div[2]/div[10]/span[2]").text.replace(',', ''))
         #shots hit
-        matchData[15 + (playerNo-1)*15] = driver.find_element_by_xpath("//*[@id='app']/div[3]/div[1]/div/main/div[2]/div/div[2]/div[" + str(q) + "]/div[3]/div[" + str(r) + "]/div[2]/div[1]/div[2]/div[11]/span[2]").text
+        matchData[15 + (playerNo-1)*15] = int(driver.find_element_by_xpath("//*[@id='app']/div[3]/div[1]/div/main/div[2]/div/div[2]/div[" + str(q) + "]/div[3]/div[" + str(r) + "]/div[2]/div[1]/div[2]/div[11]/span[2]").text.replace(',', ''))
         #accuracy
-        matchData[16 + (playerNo-1)*15] = driver.find_element_by_xpath("//*[@id='app']/div[3]/div[1]/div/main/div[2]/div/div[2]/div[" + str(q) + "]/div[3]/div[" + str(r) + "]/div[2]/div[1]/div[2]/div[12]/span[2]").text
+        matchData[16 + (playerNo-1)*15] = float(driver.find_element_by_xpath("//*[@id='app']/div[3]/div[1]/div/main/div[2]/div/div[2]/div[" + str(q) + "]/div[3]/div[" + str(r) + "]/div[2]/div[1]/div[2]/div[12]/span[2]").text.strip('%'))
         #revives
-        matchData[17 + (playerNo-1)*15] = driver.find_element_by_xpath("//*[@id='app']/div[3]/div[1]/div/main/div[2]/div/div[2]/div[" + str(q) + "]/div[3]/div[" + str(r) + "]/div[2]/div[2]/div[2]/div[2]/span[2]").text
+        matchData[17 + (playerNo-1)*15] = int(driver.find_element_by_xpath("//*[@id='app']/div[3]/div[1]/div/main/div[2]/div/div[2]/div[" + str(q) + "]/div[3]/div[" + str(r) + "]/div[2]/div[2]/div[2]/div[2]/span[2]").text)
         #revives received
-        matchData[18 + (playerNo-1)*15] = driver.find_element_by_xpath("//*[@id='app']/div[3]/div[1]/div/main/div[2]/div/div[2]/div[" + str(q) + "]/div[3]/div[" + str(r) + "]/div[2]/div[2]/div[2]/div[3]/span[2]").text
+        matchData[18 + (playerNo-1)*15] = int(driver.find_element_by_xpath("//*[@id='app']/div[3]/div[1]/div/main/div[2]/div/div[2]/div[" + str(q) + "]/div[3]/div[" + str(r) + "]/div[2]/div[2]/div[2]/div[3]/span[2]").text)
         
         #close drop down menu
         driver.find_element_by_xpath("//*[@id='app']/div[3]/div[1]/div/main/div[2]/div/div[2]/div[" + str(q) + "]/div[3]/div[" + str(r) + "]/div[1]/div[7]/span").click()
