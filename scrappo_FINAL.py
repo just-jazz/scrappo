@@ -41,10 +41,12 @@ class Scrappo:
          mode = input("Do you want to start at a specific date? [yes/no] ")
          
          if mode == "yes":
-             inputQ = int(input("How many days back? "))-1
+             inputQ = int(input("Enter q: "))
+             inputR = int(input("Enter r: "))-1
          else: 
-             inputQ = 0
-         return [userReports, noOfMatches, username, inputQ]
+             inputQ = 1
+             inputR = 0
+         return [userReports, noOfMatches, username, inputQ, inputR]
      
     def scrape(self, userInput):
         Scrape = Scrappo()
@@ -54,6 +56,7 @@ class Scrappo:
         noOfMatches = int(userInput[1])
         userName = userInput[2]
         inputQ = userInput[3]
+        inputR = userInput[4]
         
         driver_overview = webdriver.Chrome()
         driver_overview.maximize_window()
@@ -76,8 +79,8 @@ class Scrappo:
         dfMatchData = Scrape.createDF()
         scrapedMatches = 0
         
-        line = 16
-        day = 1 + inputQ
+        line = inputR
+        day = inputQ
         Scrape.scrolldown(driver_overview, inputQ)
         
         while scrapedMatches < noOfMatches:
@@ -199,6 +202,7 @@ class Scrappo:
                 else:
                     print("kein FSmatch an Stelle " + str(r) )
                     r = r+1
+                    driver_overview.execute_script("window.scrollBy(0, 200)")
                     
             except Exception:
                 q = q+1 
@@ -266,7 +270,7 @@ class Scrappo:
         q=1
         r=1
         
-        while q <= 10: 
+        while q <= 20: 
             try:
                 if driver.find_element_by_xpath("//*[@id='app']/div[3]/div[1]/div/main/div[2]/div/div[2]/div[" + str(q) + "]/div[3]/div[" + str(r) + "]/div[1]/div[1]/a").text == userName:
                     print(driver.find_element_by_xpath("//*[@id='app']/div[3]/div[1]/div/main/div[2]/div/div[2]/div[" + str(q) + "]/div[3]/div[" + str(r) + "]/div[1]/div[1]/a").text)                
