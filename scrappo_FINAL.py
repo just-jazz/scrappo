@@ -212,7 +212,7 @@ class Scrappo:
         i = 0
         while i <= inputQ:
             driver_overview.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            time.sleep(1)
+            time.sleep(0.5)
             i = i+1
         return
     
